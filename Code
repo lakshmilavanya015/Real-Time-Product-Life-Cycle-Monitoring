@@ -1,0 +1,137 @@
+# ============================================================
+# REAL-TIME PRODUCT LIFE CYCLE MONITORING – JOINT CODE
+# Tech: Python, Pandas, NumPy, Scikit-learn, TensorFlow, FastAPI
+# ============================================================
+
+import numpy as np
+import pandas as pd
+from fastapi import FastAPI
+from pydantic import BaseModel
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+
+# ============================================================
+# 1. DATA SIMULATION
+# ============================================================
+
+np.random.seed(42)
+
+data = pd.DataFrame({
+    "temperature": np.random.normal(50, 5, 500),
+    "vibration": np.random.normal(20, 3, 500),
+    "voltage": np.random.normal(220, 10, 500),
+    "usage_hours": np.random.randint(100, 1000, 500),
+    "status": np.random.choice(["production", "usage", "maintenance", "end_of_life"], 500)
+})
+
+# Status encode
+data["status_encoded"] = data["status"].astype("category").cat.codes
+
+# Features and Labels
+X = data[["temperature", "vibration", "voltage", "usage_hours"]]
+y = data["status_encoded"]
+
+# Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# ============================================================
+# 2. ANOMALY DETECTION (Isolation Forest)
+# ============================================================
+
+iso = IsolationForest(contamination=0.05)
+anomaly_labels = iso.fit_predict(X_scaled)
+data["anomaly"] = (anomaly_labels == -1).astype(int)
+
+# ============================================================
+# 3. ML MODEL: LIFE-CYCLE STATUS PREDICTION
+# ============================================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42
+)
+
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+# (Optional) print accuracy
+print("=== Model Evaluation ===")
+print(classification_report(y_test, model.predict(X_test)))
+
+# ============================================================
+# 4. OPTIONAL DEEP ANOMALY DETECTION (Autoencoder)
+# ============================================================
+
+try:
+    import tensorflow as tf
+    from tensorflow.keras import layers
+
+    input_dim = X_scaled.shape[1]
+
+    autoencoder = tf.keras.Sequential([
+        layers.Dense(16, activation='relu', input_shape=(input_dim,)),
+        layers.Dense(8, activation='relu'),
+        layers.Dense(16, activation='relu'),
+        layers.Dense(input_dim, activation='linear')
+    ])
+
+    autoencoder.compile(optimizer='adam', loss='mse')
+    autoencoder.fit(X_scaled, X_scaled, epochs=20, batch_size=32, verbose=0)
+
+    recon = autoencoder.predict(X_scaled)
+    errors = np.mean((X_scaled - recon)**2, axis=1)
+    threshold = np.percentile(errors, 95)
+
+    data["deep_anomaly"] = (errors > threshold).astype(int)
+
+except Exception as e:
+    print("TensorFlow not installed: Skipping Autoencoder…")
+
+# ============================================================
+# 5. FASTAPI REAL-TIME MONITORING API
+# ============================================================
+
+app = FastAPI()
+
+# Input model for API
+class ProductData(BaseModel):
+    temperature: float
+    vibration: float
+    voltage: float
+    usage_hours: float
+
+@app.get("/")
+def home():
+    return {"message": "Real-Time Product Life Cycle Monitoring API is running"}
+
+# Prediction endpoint
+@app.post("/predict")
+def predict(data_in: ProductData):
+    X_input = np.array([[data_in.temperature, data_in.vibration, data_in.voltage, data_in.usage_hours]])
+    X_input_scaled = scaler.transform(X_input)
+
+    # Predict lifecycle status
+    status_pred = int(model.predict(X_input_scaled)[0])
+
+    # Detect anomaly
+    anomaly_pred = iso.predict(X_input_scaled)[0]
+    anomaly = True if anomaly_pred == -1 else False
+
+    return {
+        "predicted_status_code": status_pred,
+        "predicted_status_name": str(data["status"].astype("category").cat.categories[status_pred]),
+        "anomaly_detected": anomaly
+    }
+
+# Endpoint for latest live data (for dashboard)
+@app.get("/live_data")
+def live_data():
+    latest = data.tail(20)
+    return latest.to_dict(orient="records")
+
+# ============================================================
+# HOW TO RUN:
+# uvicorn main:app --reload
+# ============================================================
