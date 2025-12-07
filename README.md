@@ -1,7 +1,6 @@
-# Real-Time-Product-Life-Cycle-Monitoring
-Machine Learning–powered Real-Time Product Life Cycle Monitoring system with anomaly detection, lifecycle status prediction, and FastAPI-based real-time API for dashboards and business insights.
 
-# 🚀 Real-Time Product Life Cycle Monitoring (ML + FastAPI)
+
+# 🚀 Real-Time Product Life Cycle Monitoring 
 
 A machine learning–powered system designed to **monitor, analyze, and predict the complete life cycle of a product** — from production to usage, maintenance, and end-of-life.  
 The project also includes **real-time anomaly detection**, **status prediction**, and a **FastAPI-based monitoring API** suitable for dashboards or live analytics systems.
